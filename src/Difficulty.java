@@ -1,4 +1,6 @@
-public class Difficulty {
+import java.io.Serializable;
+
+public class Difficulty implements Serializable {
     public final int rows;
     public final int columns;
     public final int landmines;
