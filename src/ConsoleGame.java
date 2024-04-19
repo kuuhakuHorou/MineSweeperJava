@@ -2,17 +2,27 @@ import java.util.Scanner;
 
 import map.Coordinate;
 
-public class ConsoleGame extends Game {
+public class ConsoleGame implements Game {
 
-    Scanner scan;
+    private Scanner scan;
+    private MineSweeperMap map;
 
     public ConsoleGame() {
         super();
         scan = new Scanner(System.in);
     }
 
+    private void mapConstructs(Difficulty d) {
+        map = new MineSweeperMap(d.rows, d.columns, d.landmines);
+    }
+
     @Override
-    public void degreeOfDifficulty() {
+    public void newGame() {
+        gameDifficultyChoose();
+        gamePlay();
+    }
+
+    public Difficulty degreeOfDifficulty() {
         int rows, columns, landmines;
         System.out.print("Please enter the amount of rows(9 - 24): ");
         rows = scan.nextInt();
@@ -20,10 +30,9 @@ public class ConsoleGame extends Game {
         columns = scan.nextInt();
         System.out.printf("Please enter the amount of land mines(10 - %3d): ", (rows - 1) * (columns - 1));
         landmines = scan.nextInt();
-        customize = new Config(rows, columns, landmines);
+        return new Difficulty(rows, columns, landmines);
     }
 
-    @Override
     public void gameDifficultyChoose() {
         int choose;
         System.out.println("1: easy");
@@ -35,41 +44,38 @@ public class ConsoleGame extends Game {
 
         switch(choose) {
             case 1:
-                mapConstructs(easy);
+                mapConstructs(Difficulty.EASY);
                 break;
             case 2:
-                mapConstructs(normal);
+                mapConstructs(Difficulty.NORMAL);
                 break;
             case 3:
-                mapConstructs(hard);
+                mapConstructs(Difficulty.HARD);
                 break;
             case 4:
-                degreeOfDifficulty();
+                Difficulty customize = degreeOfDifficulty();
                 mapConstructs(customize);
                 break;
         }
-        gamePlay();
     }
 
-    @Override
     public void gameStart() {
         Coordinate player;
         printMap();
         System.out.print("Please enter a coordinate(x y): ");
         player = getCoordinate();
         map.landMineGenerate(player);
-        map.landMineTester(player);
+        map.sweep(player);
     }
 
-    @Override
     public void gamePlay() {
         Coordinate player;
         int modChoose = 0;
         gameStart();
         printMap();
-        isWin();
+        map.checkWin();
 
-        while (!over) {
+        while (!map.isEnd()) {
             System.out.print("Please enter a coordinate(x y): ");
             player = getCoordinate();
             while (map.overRange(player)) {
@@ -80,16 +86,16 @@ public class ConsoleGame extends Game {
             modChoose = scan.nextInt();
             switch (modChoose) {
                 case 1:
-                    sweep(player);
+                    map.sweep(player);
                     break;
                 case 2:
-                    mark(player);
+                    map.mark(player);
                     break;
             }
             printMap();
         }
 
-        if (sweepLandMine) {
+        if (!map.isWin()) {
             System.out.println("You lose");
         }
         else {
@@ -100,7 +106,6 @@ public class ConsoleGame extends Game {
         scan.next();
     }
 
-    @Override
     public Coordinate getCoordinate() {
         int x, y;
         x = scan.nextInt();
@@ -111,16 +116,14 @@ public class ConsoleGame extends Game {
     public void printMap() {
         int i;
         Coordinate loop = new Coordinate();
-        MapInformation mapValue;
-        Boolean markValue;
-        Integer aroundValue;
+        Block mapValue;
 
         System.out.print("  x:");
         for (i = 1; i <= map.getColumns(); i++) {
             System.out.printf("%2d", i);
         }
         System.out.printf("        ");
-        System.out.printf("land mines: %2d%n", (map.getLandMines() - flag));
+        System.out.printf("land mines: %2d%n", (map.getLandMines() - map.getFlag()));
 
         System.out.print(" y");
         for (i = 0; i <= map.getColumns() + 1; i++) {
@@ -133,36 +136,31 @@ public class ConsoleGame extends Game {
 
             for (loop.x = 0; loop.x < map.getColumns(); loop.x++) {
                 mapValue = map.getMapValue(loop);
-                markValue = map.getMarkValue(loop);
-                aroundValue = map.getAroundValue(loop);
 
-                if (markValue.booleanValue()) {
-                    if (this.sweepLandMine && !mapValue.equals(MapInformation.LandMine)) {
+                if (mapValue.haveFlag()) {
+                    if (!map.isWin() && !mapValue.isLandMine()) {
                         System.out.print("XX");
                     } 
                     else {
                         System.out.print("◢");
                     }
                 }
-                else if (mapValue.equals(MapInformation.NonSweep)) {
-                    System.out.print("[]");
-                }
-                else if (mapValue.equals(MapInformation.Space)) {
-                    System.out.print("  ");
-                }
-                else if (mapValue.equals(MapInformation.MineAround)) {
-                    System.out.printf("%2d", aroundValue.intValue());
-                }
-                else if (mapValue.equals(MapInformation.LandMine)) {
-                    if (this.sweepLandMine) {
-                        System.out.printf("%s", "※");
+                else if (!mapValue.isOpen()) {
+                    if (!map.isWin() && mapValue.isLandMine()) {
+                        System.out.print("※");
                     }
                     else {
                         System.out.print("[]");
                     }
                 }
-                else if (mapValue.equals(MapInformation.SweepLandMine)) {
-                    System.out.printf("%s", "◎");
+                else if (mapValue.isSweepLandMine()) {
+                    System.out.print("◎");
+                }
+                else if (mapValue.isSpace()) {
+                    System.out.print("  ");
+                }
+                else if (!mapValue.isSpace()) {
+                    System.out.printf("%2d", mapValue.getMineAround());
                 }
             }
 

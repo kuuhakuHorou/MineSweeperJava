@@ -1,39 +1,36 @@
 import java.util.ArrayList;
 import java.util.Objects;
+import java.util.Random;
 
 import map.Coordinate;
 import map.Map;
 
 public class MineSweeperMap {
-    /**
-     * The main map of minesweeper game
-     */
-    private final Map<MapInformation> map;
 
     /**
-     * The flag map of minesweeper game
+     * The main map of minesweeper game.
      */
-    private final Map<Boolean> mark;
+    private final Map<Block> map;
 
     /**
-     * The map of how many mines are around the block
-     */
-    private final Map<Integer> around;
-
-    /**
-     * The rows of the map
-     */
-    private final int rows;
-
-    /**
-     * The columns of the map
-     */
-    private final int columns;
-
-    /**
-     * The amount of land mines in the whole map
+     * The amount of land mines in the whole map.
      */
     private final int landmines;
+
+    /**
+     * Record the mine sweeper game is end.
+     */
+    private boolean end;
+
+    /**
+     * Record if player swept land mine.
+     */
+    private boolean sweepLandMine;
+
+    /**
+     * The amount of flags that player marked.
+     */
+    private int flag;
 
     /**
      * Constructs the map of minesweeper game with specified values.
@@ -42,21 +39,21 @@ public class MineSweeperMap {
      * @param landmines the amount of land mines in the whole map
      */
     public MineSweeperMap(int rows, int columns, int landmines) {
-        this.rows = rows;
-        this.columns = columns;
         this.landmines = landmines;
-        map = new Map<>(this.rows, this.columns, MapInformation.NonSweep);
-        mark = new Map<>(this.rows, this.columns, Boolean.FALSE);
-        around = new Map<>(this.rows, this.columns, Integer.valueOf(0));
+        map = new Map<>(rows, columns);
+        initialization();
     }
 
     /**
      * Initialize all maps with default value
      */
     public void initialization() {
-        map.initialization(MapInformation.NonSweep);
-        mark.initialization(Boolean.FALSE);
-        around.initialization(Integer.valueOf(0));
+        end = false;
+        sweepLandMine = false;
+        flag = 0;
+        for (int i = 0; i < getSize(); i++) {
+            map.setValue(i, new Block());
+        }
     }
 
     /**
@@ -67,25 +64,28 @@ public class MineSweeperMap {
     public void landMineGenerate(Coordinate c) {
         Objects.requireNonNull(c);
         ArrayList<Coordinate> cList = new ArrayList<>();
-        for (int i = 0; i < rows; i++) {
-            for (int j = 0; j < columns; j++) {
+        for (int i = 0; i < getRows(); i++) {
+            for (int j = 0; j < getColumns(); j++) {
                 cList.add(new Coordinate(j, i));
             }
         }
         cList.remove(c);
 
-        int pow = 1;
-        int land = cList.size();
-        while (land != 0) {
-            land /= 10;
-            pow++;
-        }
+        Random random = new Random();
+        int mines = 0;
+        // int pow = 1;
+        // int mines = cList.size();
+        // while (land != 0) {
+        //     land /= 10;
+        //     pow++;
+        // }
 
-        while (land < landmines) {
-            int rand = (int)(Math.random() * Math.pow(10, pow)) % cList.size();
-            map.setValue(cList.get(rand), MapInformation.LandMine);
+        while (mines < landmines) {
+            // int rand = (int)(Math.random() * Math.pow(10, pow)) % cList.size();
+            int rand = random.nextInt(cList.size());
+            map.setValue(cList.get(rand), new Block(true));
             cList.remove(rand);
-            land++;
+            mines++;
         }
     }
 
@@ -97,12 +97,12 @@ public class MineSweeperMap {
      * @throws IndexOutOfBoundsException if the {@code c} is out of range
      * @throws NullPointerException if {@code c} is {@code null}
      */
-    public boolean landMineTester(Coordinate c) {
-        if (getMapValue(c).equals(MapInformation.LandMine)) {
-            setMapValue(c, MapInformation.SweepLandMine);
+    private boolean landMineTester(Coordinate c) {
+        if (getMapValue(c).isLandMine()) {
+            getMapValue(c).setOpen(true);
             return true;
         }
-        else if (getMarkValue(c).booleanValue()) {
+        else if (getMapValue(c).haveFlag()) {
             return false;
         }
 
@@ -116,29 +116,31 @@ public class MineSweeperMap {
 
         int landmine = 0;
         Coordinate loop = new Coordinate();
-        MapInformation mapValue = getMapValue(c);
-        Boolean markValue = getMarkValue(c);
+        Block mapValue = getMapValue(c);
 
-        if (markValue.booleanValue()) {
+        if (mapValue.haveFlag()) {
             return;
         }
-        else if (!mapValue.equals(MapInformation.NonSweep)) {
+        else if (mapValue.isOpen()) {
             return;
         }
+
+        mapValue.setOpen(true);
 
         for (loop.y = c.y - 1; loop.y <= c.y + 1; loop.y++) {
             for (loop.x = c.x - 1; loop.x <= c.x + 1; loop.x++) {
                 if (overRange(loop) || loop.equals(c)) continue;
 
                 mapValue = getMapValue(loop);
-                if (mapValue.equals(MapInformation.LandMine) || mapValue.equals(MapInformation.SweepLandMine)) {
+                if (mapValue.isLandMine()) {
                     landmine++;
                 }
             }
         }
 
+        getMapValue(c).setMineAround(landmine);
+
         if (landmine == 0) {
-            setMapValue(c, MapInformation.Space);
             for (loop.y = c.y - 1; loop.y <= c.y + 1; loop.y++) {
                 for (loop.x = c.x - 1; loop.x <= c.x + 1; loop.x++) {
                     if (overRange(loop) || loop.equals(c)) continue;
@@ -149,14 +151,110 @@ public class MineSweeperMap {
                 }
             }
         }
-        else {
-            setMapValue(c, MapInformation.MineAround);
-            setAroundValue(c, Integer.valueOf(landmine));
-        }
     }
 
     private boolean nonSweepAndNoFlag(Coordinate c) {
-        return getMapValue(c).equals(MapInformation.NonSweep) && !getMarkValue(c).booleanValue();
+        return !getMapValue(c).isOpen() && !getMapValue(c).haveFlag();
+    }
+
+    /**
+     * Check all space has been swept.
+     */
+    public void checkWin() {
+        int untreatedPlaces = 0, i;
+
+        for (i = 0; i < map.getSize(); i++) {
+            if (!getMapValue(i).isOpen() && !getMapValue(i).isLandMine()) {
+                untreatedPlaces++;
+            }
+        }
+
+        if (untreatedPlaces == 0) {
+            for (i = 0; i < map.getSize(); i++) {
+                if (getMapValue(i).isLandMine() && !getMapValue(i).haveFlag()) {
+                    getMapValue(i).setFlag(true);
+                    flag++;
+                }
+            }
+            end = true;
+        }
+    }
+
+    /**
+     * 
+     * @param c the coordinate that want to sweep
+     * @throws IndexOutOfBoundsException if {@code c} is out of range
+     * @throws NullPointerException if {@code c} is {@code null}
+     */
+    public void sweep(Coordinate c) {
+        Block mapValue = getMapValue(c);
+
+        if (mapValue.isOpen() && !mapValue.isSpace()) {
+            sweepOnNumber(c);
+            sweepLandMine = end;
+        }
+        else {
+            sweepLandMine = landMineTester(c);
+            if (sweepLandMine) {
+                end = sweepLandMine;
+            }
+        }
+        if (!sweepLandMine) {
+            checkWin();
+        }
+    }
+
+    private void sweepOnNumber(Coordinate c) {
+        Coordinate loop = new Coordinate();
+        int flags = 0;
+        for (loop.y = c.y - 1; loop.y <= c.y + 1; loop.y++) {
+            for (loop.x = c.x - 1; loop.x <= c.x + 1; loop.x++) {
+                if (overRange(loop) || loop.equals(c)) {
+                    continue;
+                }
+                if (getMapValue(loop).haveFlag()) {
+                    flags++;
+                }
+            }
+        }
+
+        if (getMapValue(c).getMineAround() == flags) {
+            for (loop.y = c.y - 1; loop.y <= c.y + 1; loop.y++) {
+                for (loop.x = c.x - 1; loop.x <= c.x + 1; loop.x++) {
+                    if (overRange(loop) || loop.equals(c)) {
+                        continue;
+                    }
+                    if (getMapValue(loop).haveFlag()) {
+                        continue;
+                    }
+                    sweepLandMine = landMineTester(loop);
+                    if (sweepLandMine) {
+                        end = sweepLandMine;
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * 
+     * @param c the coordinate that want to mark
+     * @throws IndexOutOfBoundsException if {@code c} is out of range
+     * @throws NullPointerException if {@code c} is {@code null}
+     */
+    public void mark(Coordinate c) {
+        Block mapValue = getMapValue(c);
+
+        if (!mapValue.isOpen()) {
+            if (!getMapValue(c).haveFlag()) {
+                getMapValue(c).setFlag(true);;
+                flag++;
+            }
+            else {
+                getMapValue(c).setFlag(false);
+                flag--;
+            }
+        }
     }
 
     /**
@@ -168,74 +266,56 @@ public class MineSweeperMap {
      */
     public boolean overRange(Coordinate c) {
         Objects.requireNonNull(c);
-        return (c.x < 0 || c.x > columns - 1 || c.y < 0 || c.y > rows - 1);
+        return (c.x < 0 || c.x > getColumns() - 1 || c.y < 0 || c.y > getRows() - 1);
     }
 
     /**
-     * set the information at the specified coordinate at the main map.
-     * @param c the coordinate at the main map
-     * @param m the information which is write into the map
-     * @throws IndexOutOfBoundsException if the {@code c} is out of range
-     * @throws NullPointerException if {@code c}, {@code m} is {@code null}
+     * Set minesweeper game is end
+     * @param b {@code true} if game is end otherwise
+     * {@code false}
      */
-    public void setMapValue(Coordinate c, MapInformation m) {
-        map.setValue(c, m);
+    public void setEnd(boolean b) {
+        end = b;
     }
 
     /**
-     * Set the information at the specified index at the main map.
-     * @param i the index at the main map
-     * @param m the information which is write into the map
-     * @throws IndexOutOfBoundsException if the {@code i} is out of range
-     * @throws NullPointerException if {@code m} is {@code null}
+     * Set player swept at land mine
+     * @param b {@code true} if player swept at land mine otherwise
+     * {@code false}
      */
-    public void setMapValue(int i, MapInformation m) {
-        map.setValue(i, m);
+    public void setSweepLandMine(boolean b) {
+        sweepLandMine = b;
     }
 
     /**
-     * Set the information at the specified coordinate at the flag map.
-     * @param c the coordinate at the flag map
-     * @param b {@code Boolean.TURE} if there is a flag otherwise {@code Boolean.FALSE}
-     * @throws IndexOutOfBoundsException if the {@code c} is out of range
-     * @throws NullPointerException if {@code c}, {@code b} is {@code null}
+     * Set the amount of flags that player marked
+     * @param i the amount of flags
      */
-    public void setMarkValue(Coordinate c, Boolean b) {
-        mark.setValue(c, b);
+    public void setFlag(int i) {
+        flag = i;
     }
 
-    /**
-     * Set the information at the specified index at the flag map.
-     * @param i the index at the flag map
-     * @param b {@code Boolean.TRUE} if there is a flag otherwise {@code Boolean.FALSE}
-     * @throws IndexOutOfBoundsException if the {@code i} is out of range
-     * @throws NullPointerException if {@code b} is {@code null}
-     */
-    public void setMarkValue(int i, Boolean b) {
-        mark.setValue(i, b);
-    }
+    // /**
+    //  * set the information at the specified coordinate at the main map.
+    //  * @param c the coordinate at the main map
+    //  * @param m the information which is write into the map
+    //  * @throws IndexOutOfBoundsException if the {@code c} is out of range
+    //  * @throws NullPointerException if {@code c}, {@code m} is {@code null}
+    //  */
+    // public void setMapValue(Coordinate c, Block m) {
+    //     map.setValue(c, m);
+    // }
 
-    /**
-     * Set the amount of how many land mines around the specified coordinate.
-     * @param c the coordinate at the map
-     * @param i the amount of how many land mines
-     * @throws IndexOutOfBoundsException if the {@code c} is out of range
-     * @throws NullPointerException if {@code c}, {@code i} is {@code null}
-     */
-    public void setAroundValue(Coordinate c, Integer i) {
-        around.setValue(c, i);
-    }
-
-    /**
-     * Set the amount of how many land mines aroud the specified index.
-     * @param i the index at the map
-     * @param I the amount of how many land mines
-     * @throws IndexOutOfBoundsException if the {@code i} is out of range
-     * @throws NullPointerException if {@code I} is {@code null}
-     */
-    public void setAroundValue(int i, Integer I) {
-        around.setValue(i, I);
-    }
+    // /**
+    //  * Set the information at the specified index at the main map.
+    //  * @param i the index at the main map
+    //  * @param m the information which is write into the map
+    //  * @throws IndexOutOfBoundsException if the {@code i} is out of range
+    //  * @throws NullPointerException if {@code m} is {@code null}
+    //  */
+    // public void setMapValue(int i, Block m) {
+    //     map.setValue(i, m);
+    // }
 
     /**
      * Get the information at the specified coordinate at the main map.
@@ -244,7 +324,7 @@ public class MineSweeperMap {
      * @throws IndexOutOfBoundsException if the {@code c} is out of range
      * @throws NullPointerException if {@code c} is {@code null}
      */
-    public MapInformation getMapValue(Coordinate c) {
+    public Block getMapValue(Coordinate c) {
         return map.getValue(c);
     }
 
@@ -254,42 +334,34 @@ public class MineSweeperMap {
      * @return the information at the index at the main map
      * @throws IndexOutOfBoundsException if the {@code i} is out of range
      */
-    public MapInformation getMapValue(int i) {
+    public Block getMapValue(int i) {
         return map.getValue(i);
     }
 
     /**
-     * Get the information at the specified coordinate at the flag map.
-     * @param c the coordinate at the flag map
-     * @return {@code Boolean.TRUE} if there is a flag otherwise
-     * {@code Boolean.FALSE}
-     * @throws IndexOutOfBoundsException if the {@code c} is out of range
-     * @throws NullPointerException if {@code c} is {@code null}
+     * Check is game end.
+     * @return {@code true} is minesweeper game is end otherwise
+     * {@code false}
      */
-    public Boolean getMarkValue(Coordinate c) {
-        return mark.getValue(c);
+    public boolean isEnd() {
+        return end;
     }
 
     /**
-     * Get the information at the specified index at the flag map
-     * @param i the index at the flag map
-     * @return {@code Boolean.TURE} if there is a flag otherwise
-     * {@code Boolean.FALSE}
-     * @throws IndexOutOfBoundsException if the {@code i} is out of range
+     * Check is player win.
+     * @return {@code true} if player clear space without swept at land mine otherwise
+     * {@code false}
      */
-    public Boolean getMarkValue(int i) {
-        return mark.getValue(i);
+    public boolean isWin() {
+        return !sweepLandMine;
     }
 
     /**
-     * Get the amount of how many land mines around the specified block.
-     * @param c the coordinate at the map
-     * @return the amount of land mines around the block
-     * @throws IndexOutOfBoundsException if the {@code c} is out of range
-     * @throws NullPointerException if {@code c} is {@code null}
+     * Get the amount of flags.
+     * @return the amount of flags that player marked
      */
-    public Integer getAroundValue(Coordinate c) {
-        return around.getValue(c);
+    public int getFlag() {
+        return flag;
     }
 
     /**
@@ -297,7 +369,7 @@ public class MineSweeperMap {
      * @return the amount of rows
      */
     public int getRows() {
-        return this.rows;
+        return map.getRows();
     }
 
     /**
@@ -305,7 +377,7 @@ public class MineSweeperMap {
      * @return the amount of columns
      */
     public int getColumns() {
-        return this.columns;
+        return map.getColumns();
     }
 
     /**
